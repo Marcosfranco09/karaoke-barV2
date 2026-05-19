@@ -2,6 +2,9 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 require('dotenv').config();
 
+// Deshabilitar la política que exige interacción del usuario para el autoplay con sonido
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gestures-requirement');
+
 function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1200,
