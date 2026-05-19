@@ -295,7 +295,7 @@ async function cleanUploadsDir() {
 }
 
 const PORT = process.env.PORT || 3000;
-const DJ_TOKEN = process.env.DJ_TOKEN || 'karaoke-dj-secret-2026';
+const DJ_TOKEN = process.env.DJ_TOKEN || 'puertochoppdj';
 
 app.use(express.json()); // Para leer JSON del cliente
 
