@@ -7,7 +7,7 @@
     "start": "electron .",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
-    "package": "electron-packager . \"Puerto Chopp DJ\" --platform=win32 --arch=x64 --out=dist --overwrite --asar"
+    "package": "electron-packager . \"Puerto Chopp DJ\" --platform=win32 --arch=x64 --out=dist --overwrite --asar --icon=icon.ico"
   },
   "author": "Puerto Chopp",
   "license": "ISC",
