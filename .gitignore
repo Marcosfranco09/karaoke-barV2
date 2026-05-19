@@ -1,0 +1,23 @@
+# Dependencias
+node_modules/
+electron-dj/node_modules/
+
+# Compilaciones y Binarios (Aquí está el ejecutable de 170MB)
+dist/
+electron-dj/dist/
+
+# Configuraciones de Entorno Privadas (Tokens y URLs locales)
+.env
+.env.*
+electron-dj/.env
+electron-dj/.env.*
+
+# Subidas temporales y locales de los usuarios
+tmp/
+uploads/
+public/uploads/
+
+# Archivos de Sistema
+.DS_Store
+Thumbs.db
+*.log

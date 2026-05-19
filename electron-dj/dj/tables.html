@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Puerto Chopp - Generador de Mesas</title>
+  <link rel="icon" href="favicon.png">
+  <link rel="stylesheet" href="styles/main.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <style>
+    .tables-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 2rem;
+      width: 100%;
+      max-width: 1200px;
+      padding: 2rem;
+      margin-bottom: 5rem;
+    }
+    .table-card {
+      text-align: center;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+    }
+    .qr-preview {
+      background: #fff;
+      padding: 10px;
+      border-radius: 12px;
+      width: 150px;
+      height: 150px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas {
+      display: none;
+    }
+  </style>
+</head>
+<body style="justify-content: flex-start; padding-top: 3rem;">
+  
+  <div style="text-align: center; margin-bottom: 3rem; width: 100%; max-width: 600px;">
+    <img src="assets/logo.jpg" alt="Logo" style="width: 100px; height: 100px; border-radius: 50%; border: 2px solid var(--primary-color); margin-bottom: 1rem;">
+    <h1>Generador de QR Puerto Chopp</h1>
+    <p style="color: var(--text-muted);">Los códigos se generan automáticamente con la dirección actual.</p>
+  </div>
+
+  <div class="tables-grid" id="tables-container">
+    <!-- Generado dinámicamente -->
+  </div>
+
+  <!-- Modal para ver QR en grande -->
+  <div id="qr-modal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 20000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(15px); cursor: pointer;" onclick="closeModal()">
+    <div class="glass-panel" style="width: auto; max-width: 90vw; padding: 2rem; text-align: center; border: 1px solid var(--primary-color);" onclick="event.stopPropagation()">
+      <h2 id="modal-title" style="color: var(--primary-color); margin-bottom: 1.5rem;">Mesa X</h2>
+      <img id="modal-img" src="" style="width: 100%; max-width: 500px; border-radius: 15px; background: white; padding: 15px;">
+      <p style="margin-top: 1.5rem; color: var(--text-muted);">Toca afuera para cerrar</p>
+    </div>
+  </div>
+
+  <style>
+    .qr-preview img {
+      cursor: zoom-in;
+      transition: transform 0.2s ease;
+    }
+    .qr-preview img:hover {
+      transform: scale(1.05);
+    }
+  </style>
+
+  <script>
+    const container = document.getElementById('tables-container');
+
+    async function generateAllQRs() {
+      container.innerHTML = '';
+      const baseUrl = window.location.origin + '/client.html';
+      
+      for (let i = 1; i <= 30; i++) {
+        const tableUrl = `${baseUrl}?table=${i}`;
+        const card = document.createElement('div');
+        card.className = 'glass-panel table-card';
+        
+        card.innerHTML = `
+          <h2 style="font-size: 1.5rem; color: var(--primary-color);">Mesa ${i}</h2>
+          <div class="qr-preview" id="qr-container-${i}"></div>
+          <button class="btn" style="padding: 0.6rem 1rem; font-size: 0.9rem;" onclick="downloadQR(${i})">
+            <span class="material-symbols-rounded" style="font-size: 18px;">download</span> Descargar
+          </button>
+        `;
+        
+        container.appendChild(card);
+
+        const qrContainer = document.getElementById(`qr-container-${i}`);
+        const canvas = document.createElement('canvas');
+        
+        await QRCode.toCanvas(canvas, tableUrl, {
+          width: 300,
+          margin: 2,
+          color: { dark: '#000000', light: '#ffffff' }
+        });
+        
+        const img = document.createElement('img');
+        img.src = canvas.toDataURL('image/png');
+        img.style.width = '100%';
+        img.style.borderRadius = '8px';
+        img.onclick = () => openModal(i, img.src);
+        qrContainer.appendChild(img);
+      }
+    }
+
+    function openModal(num, src) {
+      document.getElementById('modal-title').textContent = `Mesa ${num}`;
+      document.getElementById('modal-img').src = src;
+      document.getElementById('qr-modal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('qr-modal').classList.add('hidden');
+    }
+
+    function downloadQR(num) {
+      const qrContainer = document.getElementById(`qr-container-${num}`);
+      const img = qrContainer.querySelector('img');
+      const link = document.createElement('a');
+      link.href = img.src;
+      link.download = `Mesa_${num.toString().padStart(2, '0')}_PuertoChopp.png`;
+      link.click();
+    }
+
+    // Generar inicial
+    generateAllQRs();
+  </script>
+</body>
+</html>

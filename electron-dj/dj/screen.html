@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Karaoke Screen</title>
+  <link rel="icon" href="favicon.png">
+  <link rel="stylesheet" href="styles/main.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0" />
+  <style>
+
+  </style>
+</head>
+
+<body style="margin: 0; padding: 0; overflow: hidden; display: block;">
+
+
+  <!-- Splash Screen Inicial -->
+  <div id="splash-screen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 50000; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.5s ease;">
+    <img src="assets/logo.jpg" alt="Logo" style="width: 150px; height: 150px; border-radius: 50%; border: 3px solid var(--primary-color); margin-bottom: 2rem; animation: pulse 2s infinite; box-shadow: 0 0 30px rgba(255, 204, 0, 0.2);">
+    <div class="loader-small" style="border-left-color: var(--primary-color); width: 40px; height: 40px; border-width: 3px;"></div>
+  </div>
+
+  <div class="screen-container">
+    <!-- Overlay de Pausa / Espera -->
+    <div id="pause-overlay" class="hidden"
+      style="position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: var(--bg-gradient); z-index: 100; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; transition: opacity 0.5s ease;">
+      <img src="assets/logo.jpg" alt="Logo" style="width: 250px; height: 250px; border-radius: 50%; border: 5px solid var(--primary-color); margin-bottom: 2rem; opacity: 0.9;">
+      <h1 style="font-size: 5rem; margin-bottom: 1rem;">Puerto Chopp</h1>
+      <p style="font-size: 2.5rem; color: var(--text-light); opacity: 0.8;">Karaoke en espera</p>
+    </div>
+
+    <div class="player-section" id="player-section">
+      <!-- Mensaje de espera -->
+      <div id="idle-message" style="text-align: center;">
+        <img src="assets/logo.jpg" alt="Logo" style="width: 180px; height: 180px; border-radius: 50%; border: 4px solid var(--primary-color); margin-bottom: 2rem;">
+        <h1 style="font-size: 4rem; margin-bottom: 0;">Puerto Chopp</h1>
+        <p style="font-size: 1.5rem; color: var(--text-muted); margin-top: 1rem;">¡Escaneá el QR y pedí tu canción!</p>
+      </div>
+
+      <!-- Reproductor YouTube -->
+      <div id="yt-player" class="hidden" style="width: 100%; height: 100%;"></div>
+
+      <!-- Reproductor HTML5 -->
+      <video id="html-player" class="hidden" style="width: 100%; height: 100%;"></video>
+      <audio id="audio-player" class="hidden" style="width: 80%;"></audio>
+
+      <!-- Overlay de Transición -->
+      <div id="next-overlay" class="hidden"
+        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
+        <h2 style="font-size: 2.5rem; color: var(--primary-color); margin-bottom: 1.5rem;">Siguiente en cantar:</h2>
+        <h1 id="next-song-title" style="font-size: 4rem; margin-bottom: 1rem; color: #fff;"></h1>
+        <p style="font-size: 2rem; color: var(--text-light);">De: <strong id="next-client-name"></strong> <span
+            id="next-table-info" style="color: var(--text-muted); font-size: 1.5rem;"></span></p>
+      </div>
+
+      <!-- Overlay de Error de Video -->
+      <div id="error-overlay" class="hidden"
+        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; backdrop-filter: blur(10px);">
+        <h1 style="font-size: 8rem; color: var(--primary-color); margin-bottom: 1rem;">⚠️</h1>
+        <h2 style="font-size: 3rem; color: #fff; margin-bottom: 1.5rem;">Video no disponible</h2>
+        <p style="font-size: 1.8rem; color: var(--text-muted);">El video no puede reproducirse. <br> Pasando al siguiente...</p>
+      </div>
+    </div>
+
+    <div class="queue-section" style="display: flex; flex-direction: column;">
+      <h2 id="queue-label"
+        style="margin-bottom: 2rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 1rem;">
+        Siguientes en la lista
+      </h2>
+      <div id="screen-queue" style="flex: 1; overflow-y: auto;">
+        <!-- Cola dinámica -->
+      </div>
+      <div id="queue-disabled-msg" class="hidden"
+        style="text-align: center; padding: 1rem; background: rgba(255, 51, 102, 0.1); border-top: 1px solid rgba(255, 51, 102, 0.2); color: var(--primary-color); font-weight: bold; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">
+        ⚠️ Pedidos deshabilitados
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.write('<script src="' + window.djConfig.serverUrl + '/socket.io/socket.io.js"></' + 'script>');
+  </script>
+  <script src="js/screen.js"></script>
+  <!-- API de YouTube Iframe se carga después de definir los callbacks -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+</body>
+
+</html>

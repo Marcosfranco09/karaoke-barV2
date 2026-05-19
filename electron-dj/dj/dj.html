@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DJ Panel - Karaoke</title>
+  <link rel="icon" href="favicon.png">
+  <link rel="stylesheet" href="styles/main.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0" />
+  <style>
+    body { 
+      height: 100vh; 
+      overflow: hidden; 
+      padding: 1rem 0 !important; 
+      margin: 0; 
+      display: flex; 
+      flex-direction: column; 
+      align-items: center; 
+      justify-content: flex-start; 
+      box-sizing: border-box;
+    }
+    .header-bar { 
+      flex: 0 0 auto;
+      width: 95%; 
+      max-width: 1200px; 
+      margin-bottom: 1rem !important;
+      padding: 0.5rem 1.5rem !important;
+    }
+    .dj-container {
+      flex: 1;
+      width: 95%; 
+      max-width: 1200px;
+      margin-top: 0 !important;
+      margin-bottom: 1rem;
+      min-height: 0; 
+      gap: 1.5rem !important;
+    }
+    .control-deck {
+      flex: 0 0 auto;
+      margin: 0 !important;
+      padding: 1rem 2.5rem !important;
+    }
+    .queue-card { background: var(--glass-bg); padding: 1.5rem; border-radius: 16px; border: 1px solid var(--glass-border); }
+    .qr-container { text-align: center; margin-bottom: 1rem; }
+    .qr-container img { width: 150px; height: 150px; border-radius: 8px; border: 2px solid var(--primary-color); }
+    .controls { display: flex; gap: 1rem; align-items: center; margin-bottom: 1.5rem; }
+    .switch { position: relative; display: inline-block; width: 44px; height: 22px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(255,255,255,0.1); transition: .4s; border-radius: 34px; }
+    .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 4px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+    input:checked + .slider { background-color: var(--primary-color); }
+    input:checked + .slider:before { transform: translateX(22px); }
+
+    /* Bloqueo Mobile */
+    #mobile-block {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: var(--bg-gradient);
+      z-index: 999999;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+    }
+    @media (max-width: 1023px) {
+      #mobile-block { display: flex; }
+      body { overflow: hidden; }
+    }
+    @keyframes pulse { 0% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); opacity: 0.8; } }
+
+    /* Estilos mejorados para la petición */
+    .request-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--primary-color);
+      border-radius: 24px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4), inset 0 0 20px rgba(255, 204, 0, 0.05);
+      position: relative;
+      overflow: hidden;
+    }
+    .request-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .song-title {
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: var(--primary-color);
+      text-align: center;
+      line-height: 1.1;
+      margin-bottom: 0.5rem;
+      text-shadow: 0 0 20px rgba(255, 204, 0, 0.3);
+    }
+    .client-info {
+      text-align: center;
+      font-size: 1.2rem;
+      color: #fff;
+      margin-bottom: 1.5rem;
+    }
+    .input-group-panel {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 1.2rem;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      margin-bottom: 1.2rem;
+    }
+  </style>
+</head>
+<body>
+
+
+  <div class="header-bar" style="display: flex; align-items: center; justify-content: space-between; padding: 1rem 2rem; margin-bottom: 1.5rem;">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <img src="assets/logo.jpg" alt="Logo" style="width: 50px; height: 50px; border-radius: 50%; border: 1px solid var(--primary-color);">
+      <h1 style="margin: 0; font-size: 1.8rem;">Panel del DJ</h1>
+    </div>
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <div style="display: flex; align-items: center; gap: 0.8rem; background: rgba(255,255,255,0.05); padding: 0.5rem 1.2rem; border-radius: 50px; border: 1px solid var(--glass-border); backdrop-filter: blur(10px);">
+        <label style="color: var(--text-light); font-weight: 600; font-size: 0.9rem; cursor: pointer;" for="requests-switch">Pedidos:</label>
+        <label class="switch">
+          <input type="checkbox" id="requests-switch">
+          <span class="slider round"></span>
+        </label>
+      </div>
+      <button id="btn-logout" class="btn-icon" style="width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.05); color: var(--text-muted);" title="Cerrar Sesión">
+        <span class="material-symbols-rounded">logout</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="dj-container">
+    <!-- Peticiones Entrantes -->
+    <div class="glass-panel" style="max-width: none; height: 100% !important; padding: 1.5rem !important; display: flex; flex-direction: column;">
+      <h2 style="text-align: center;">Peticiones Entrantes <span class="badge" id="pending-count">0</span></h2>
+      <div id="requests-container" style="overflow-y: auto; flex: 1; padding: 0; margin-bottom: 1rem;">
+        <p id="empty-requests-msg" style="text-align: center; margin-top: 2rem; color: var(--text-muted);">No hay peticiones pendientes</p>
+      </div>
+      <button class="btn" id="btn-manual-add" style="width: 100%; background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(20px); border: 1px solid var(--glass-border); color: var(--text-light); display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 1.2rem; border-radius: 16px; font-weight: normal; font-size: 1.1rem; transition: background 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+        <span class="material-symbols-rounded">add_circle</span> Agregar Manualmente
+      </button>
+    </div>
+
+    <!-- Cola -->
+    <div class="glass-panel" style="max-width: none; height: 100% !important; padding: 1.5rem !important; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; justify-content: center; gap: 1rem; margin-bottom: 1.5rem;">
+        <h2 style="margin: 0;">Cola (<span id="queue-count">0</span>)</h2>
+        <button id="btn-reset-queue" class="btn-icon" style="background: rgba(255, 51, 102, 0.1); color: #ff3366; width: 32px; height: 32px; border-radius: 8px;" title="Resetear toda la cola">
+          <span class="material-symbols-rounded" style="font-size: 20px;">delete_sweep</span>
+        </button>
+      </div>
+      <div id="queue-container" style="overflow-y: auto; flex: 1; padding: 0 10px 2rem 0; margin-bottom: 1rem;">
+        <!-- Cola dinámica -->
+      </div>
+      <button class="btn" id="btn-iniciar" style="width: 100%; background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(20px); border: 1px solid var(--glass-border); color: var(--text-light); display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 1.2rem; border-radius: 16px; font-weight: normal; font-size: 1.1rem; transition: background 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+        <span class="material-symbols-rounded">rocket_launch</span> Iniciar Karaoke
+      </button>
+    </div>
+  </div>
+
+  <div class="control-deck">
+    <div class="controls deck-group" style="margin-bottom: 0;">
+      <div style="display: flex; align-items: center; gap: 1rem;">
+        <label style="color: var(--text-light); font-weight: bold; font-size: 1.2rem;">Autoplay:</label>
+        <label class="switch">
+          <input type="checkbox" id="autoplay-switch">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div id="delay-container" style="display: flex; align-items: center; gap: 0.5rem; margin-left: 0.5rem; opacity: 0.5; transition: opacity 0.3s;">
+        <label style="color: var(--text-muted); font-size: 0.9rem;">Espera (s):</label>
+        <div class="custom-number-input" style="display: flex; align-items: center; border: 1px solid var(--glass-border); border-radius: 8px; background: rgba(0,0,0,0.3); overflow: hidden;">
+          <button id="delay-minus" style="background: transparent; color: white; border: none; padding: 0.4rem 0.6rem; cursor: pointer; font-size: 1.2rem; outline: none; transition: background 0.2s;">-</button>
+          <input type="number" id="autoplay-delay-input" min="0" max="60" value="5" style="width: 40px; border: none; background: transparent; color: white; text-align: center; padding: 0; font-size: 1rem; outline: none;" disabled>
+          <button id="delay-plus" style="background: transparent; color: white; border: none; padding: 0.4rem 0.6rem; cursor: pointer; font-size: 1.2rem; outline: none; transition: background 0.2s;">+</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="deck-group" style="gap: 2rem;">
+      <button class="btn-icon" id="btn-play-prev" title="Anterior"><span class="material-symbols-rounded" style="font-size: 2rem;">skip_previous</span></button>
+      <button class="btn-icon" id="btn-toggle-play" title="Play / Pausa" style="width: 80px; height: 80px; background: var(--primary-color); border: none;"><span class="material-symbols-rounded" style="font-size: 3rem;">play_pause</span></button>
+      <button class="btn-icon" id="btn-play-next" title="Siguiente"><span class="material-symbols-rounded" style="font-size: 2rem;">skip_next</span></button>
+    </div>
+
+    <div class="deck-group">
+      <div style="display: flex; align-items: center; gap: 1rem;">
+        <label style="color: var(--text-light); font-weight: bold; font-size: 1.2rem; cursor: pointer;" for="last-song-switch">Esta será la última canción:</label>
+        <label class="switch">
+          <input type="checkbox" id="last-song-switch">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Agregar Petición Manual -->
+  <div id="manual-modal" class="modal-overlay" onclick="closeManualModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h2 style="text-align: center; margin-bottom: 1.5rem;">Agregar Petición Manual</h2>
+      <form id="manual-form">
+        <div class="form-group">
+          <label>Nombre del Cliente (o Mesa): *</label>
+          <input type="text" id="manual-client" placeholder="Ej. Juan Pérez" required>
+        </div>
+        <div class="form-group">
+          <label>Canción a cantar: *</label>
+          <input type="text" id="manual-song" placeholder="Ej. De Música Ligera" required>
+        </div>
+        <div class="form-group">
+          <label>Artista (Opcional):</label>
+          <input type="text" id="manual-artist" placeholder="Ej. Soda Stereo">
+        </div>
+
+        <!-- Interruptor de Observación (Para DJ Manual) -->
+        <div style="display: flex; align-items: center; justify-content: space-between; margin: 1.5rem 0 1rem; background: rgba(255,255,255,0.05); padding: 0.8rem 1rem; border-radius: 12px; border: 1px solid var(--glass-border);">
+          <span style="font-size: 0.9rem; color: var(--text-light); font-weight: 600;">¿Agregar observación?</span>
+          <label class="switch">
+            <input type="checkbox" id="manual-obs-toggle">
+            <span class="slider round"></span>
+          </label>
+        </div>
+
+        <!-- Campo de Observación con Animación -->
+        <div id="manual-obs-container" style="max-height: 0; opacity: 0; overflow: hidden; transition: all 0.4s ease-in-out; margin-bottom: 0;">
+          <div style="padding-bottom: 0.5rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--text-muted);">Mensaje interno / DJ:</label>
+            <textarea id="manual-obs" rows="2" placeholder="Ej: Bajarle un tono, es un cliente VIP..." style="width: 100%; padding: 0.8rem; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); color: white; font-family: inherit; resize: none; transition: all 0.3s ease; outline: none;"></textarea>
+          </div>
+        </div>
+
+        <style>
+          #manual-obs:focus {
+            border-color: var(--primary-color) !important;
+            background: rgba(255, 255, 255, 0.08) !important;
+            box-shadow: 0 0 15px rgba(255, 204, 0, 0.15);
+          }
+        </style>
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+          <button type="button" class="btn btn-secondary" id="btn-manual-cancel" style="flex: 1;">Cancelar</button>
+          <button type="submit" class="btn" style="flex: 1;">Agregar a la lista</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  
+  <div id="toast-container"></div>
+
+  <!-- Modal de Vista Previa de Video -->
+  <div id="video-preview-modal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 20000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(15px); cursor: pointer;" onclick="closePreviewModal()">
+    <div class="glass-panel" style="width: 90%; max-width: 800px; padding: 1rem; text-align: center; border: 1px solid var(--primary-color);" onclick="event.stopPropagation()">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding: 0 1rem;">
+        <h3 id="preview-title" style="color: var(--primary-color); margin: 0;">Vista Previa</h3>
+        <button class="btn-icon" onclick="closePreviewModal()" style="color: var(--text-muted);"><span class="material-symbols-rounded">close</span></button>
+      </div>
+      <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; background: #000;">
+        <iframe id="preview-iframe" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+        <video id="preview-video" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none;" controls></video>
+      </div>
+      <p style="margin-top: 1rem; color: var(--text-muted); font-size: 0.8rem;">Toca afuera para cerrar</p>
+    </div>
+  </div>
+
+  <!-- Modal de Confirmación Genérico -->
+  <div id="confirm-modal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 26000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(15px); cursor: pointer;" onclick="closeConfirmModal()">
+    <div class="glass-panel" style="width: 90%; max-width: 400px; padding: 2.5rem 2rem; text-align: center; border: 1px solid rgba(255, 51, 102, 0.3);" onclick="event.stopPropagation()">
+      <div style="background: rgba(255, 51, 102, 0.1); width: 70px; height: 70px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; border: 1px solid rgba(255, 51, 102, 0.2);">
+        <span class="material-symbols-rounded" style="font-size: 35px; color: #ff3366;">warning</span>
+      </div>
+      <h3 id="confirm-title" style="color: #fff; margin-bottom: 1rem; font-size: 1.5rem;">¿Estás seguro?</h3>
+      <p id="confirm-message" style="color: var(--text-muted); line-height: 1.5; margin-bottom: 2rem; font-size: 1rem;"></p>
+      <div style="display: flex; gap: 1rem;">
+        <button class="btn btn-secondary" style="flex: 1; padding: 1rem; border-radius: 12px;" onclick="closeConfirmModal()">Cancelar</button>
+        <button id="btn-confirm-action" class="btn btn-danger" style="flex: 1; padding: 1rem; border-radius: 12px; background: #ff3366 !important; color: #fff;">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.write('<script src="' + window.djConfig.serverUrl + '/socket.io/socket.io.js"></' + 'script>');
+  </script>
+  <script src="js/dj.js"></script>
+</body>
+</html>

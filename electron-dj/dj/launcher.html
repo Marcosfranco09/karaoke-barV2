@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lanzador - Puerto Chopp</title>
+  <link rel="stylesheet" href="styles/main.css">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0" />
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 2rem;
+      text-align: center;
+    }
+    .cards-container {
+      display: flex;
+      gap: 2rem;
+      margin-top: 3rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .launcher-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      padding: 2rem;
+      width: 200px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+    }
+    .launcher-card:hover {
+      transform: translateY(-5px);
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--primary-color);
+    }
+    .launcher-card .material-symbols-rounded {
+      font-size: 4rem;
+      color: var(--primary-color);
+    }
+    .launcher-card h3 {
+      margin: 0;
+      font-size: 1.2rem;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <img src="assets/logo.jpg" alt="Logo" style="width: 120px; height: 120px; border-radius: 50%; border: 3px solid var(--primary-color); margin-bottom: 1rem;">
+  <h1 style="margin: 0; font-size: 2.5rem;">Puerto Chopp</h1>
+  <p style="color: var(--text-muted); font-size: 1.2rem;">Panel de Control Local</p>
+
+  <div class="cards-container">
+    <div class="launcher-card" onclick="window.djAPI.openWindow('dj.html')">
+      <span class="material-symbols-rounded">admin_panel_settings</span>
+      <h3>Panel DJ</h3>
+    </div>
+    <div class="launcher-card" onclick="window.djAPI.openWindow('screen.html')">
+      <span class="material-symbols-rounded">tv</span>
+      <h3>Pantalla Karaoke</h3>
+    </div>
+    <div class="launcher-card" onclick="window.djAPI.openWindow('queue.html')">
+      <span class="material-symbols-rounded">format_list_numbered</span>
+      <h3>Pantalla Cola</h3>
+    </div>
+    <div class="launcher-card" onclick="window.djAPI.openWindow('tables.html')">
+      <span class="material-symbols-rounded">qr_code_2</span>
+      <h3>Mesas QR</h3>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pide tu Canción - Karaoke</title>
+  <link rel="icon" href="favicon.png">
+  <link rel="stylesheet" href="styles/main.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Splash Screen Inicial -->
+  <div id="splash-screen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 50000; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.5s ease;">
+    <img src="assets/logo.jpg" alt="Logo" style="width: 120px; height: 120px; border-radius: 50%; border: 2px solid var(--primary-color); margin-bottom: 2rem; animation: pulse 2s infinite;">
+    <div class="loader-small" style="border-left-color: var(--primary-color);"></div>
+  </div>
+
+  <div class="fade-in" id="request-panel" style="width: 100%; max-width: 500px; text-align: center; padding: 1rem;">
+    <img src="assets/logo.jpg" alt="Logo" style="width: 100px; height: 100px; border-radius: 50%; border: 2px solid var(--primary-color); margin-bottom: 1rem;">
+    <h1 style="margin-bottom: 0.2rem;">Puerto Chopp</h1>
+    <p style="font-size: 0.8rem; color: var(--primary-color); margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.9;">Solicita la canción que más te guste</p>
+    <div id="table-badge" class="hidden" style="margin-bottom: 2rem;">
+      <span class="badge" style="background: rgba(255, 204, 0, 0.2); border: 1px solid var(--primary-color); color: var(--primary-color); padding: 0.4rem 1rem; border-radius: 50px; font-weight: 800; font-size: 0.9rem;">Mesa <span id="table-num"></span></span>
+    </div>
+    
+    <div id="requests-form-container">
+      <div class="form-group">
+        <label for="client-name">Tu Nombre</label>
+        <input type="text" id="client-name" placeholder="Ej. Juan Pérez" autocomplete="off">
+      </div>
+      
+      <div class="form-group">
+        <label for="song-name">Nombre de la Canción</label>
+        <input type="text" id="song-name" placeholder="Ej. Bohemian Rhapsody" autocomplete="off">
+      </div>
+
+      <div class="form-group">
+        <label for="artist-name">Artista</label>
+        <input type="text" id="artist-name" placeholder="Ej. Queen" autocomplete="off">
+      </div>
+
+      <!-- Interruptor de Observación (Al Final) -->
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; background: rgba(255,255,255,0.05); padding: 0.8rem 1rem; border-radius: 12px; border: 1px solid var(--glass-border);">
+        <span style="font-size: 0.9rem; color: var(--text-light); font-weight: 600;">¿Agregar observación?</span>
+        <label class="switch">
+          <input type="checkbox" id="obs-toggle">
+          <span class="slider round"></span>
+        </label>
+      </div>
+
+      <!-- Campo de Observación con Animación -->
+      <div id="obs-container" style="max-height: 0; opacity: 0; overflow: hidden; transition: all 0.4s ease-in-out; margin-bottom: 0;">
+        <div style="padding-bottom: 1.5rem;">
+          <label for="song-obs" style="display: block; margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--text-muted);">Tu mensaje (opcional):</label>
+          <textarea id="song-obs" rows="2" placeholder="Ej: Bajarle un tono, es mi cumple, etc." style="width: 100%; padding: 0.8rem; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); color: white; font-family: inherit; resize: none; transition: all 0.3s ease; outline: none;"></textarea>
+        </div>
+      </div>
+
+      <style>
+        #song-obs:focus {
+          border-color: var(--primary-color) !important;
+          background: rgba(255, 255, 255, 0.08) !important;
+          box-shadow: 0 0 15px rgba(255, 204, 0, 0.15);
+        }
+      </style>
+      
+      <button class="btn" id="btn-request">Pedir canción</button>
+      <p id="client-error-msg" class="hidden" style="color: var(--primary-color); font-size: 0.8rem; text-align: center; margin-top: 1rem; font-weight: 600;"></p>
+    </div>
+
+    <div id="requests-disabled-msg" class="hidden" style="text-align: center; padding: 2rem 0;">
+      <h2 style="color: var(--primary-color); margin-bottom: 1rem;">🚫 Pedidos Pausados</h2>
+    </div>
+  </div>
+
+  <div class="fade-in hidden" id="status-panel" style="width: 100%; max-width: 500px; text-align: center; padding: 1rem;">
+    <h1 id="status-title">⏳ Cargando...</h1>
+    <div style="text-align: center; margin: 2rem 0;">
+      <div class="loader" id="status-loader"></div>
+      <p id="status-message" style="margin-top: 1rem;">Tu petición está siendo revisada por el DJ.</p>
+      
+      <!-- Detalle de la canción aprobada -->
+      <div id="approved-card" class="hidden" style="margin-top: 1.5rem; padding: 1.5rem; background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); border-radius: 20px; text-align: left; box-shadow: inset 0 0 20px rgba(255,255,255,0.02);">
+        <div style="margin-bottom: 1rem;">
+          <p style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.2px; margin: 0;">Tu Turno</p>
+          <p id="approved-client-name" style="font-size: 0.95rem; font-weight: 600; color: var(--text-light); margin: 0;"></p>
+        </div>
+        <h3 id="approved-song-title" style="font-size: 1.5rem; line-height: 1.2; margin-bottom: 0.5rem; background: linear-gradient(to right, #fff, #bbb); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;"></h3>
+      </div>
+    </div>
+    <button class="btn btn-secondary hidden" id="btn-new-request">Pedir otra canción</button>
+    <button class="btn btn-danger hidden" id="btn-cancel-request" style="margin-top: 1rem; background: rgba(255, 51, 102, 0.1); border: 1px solid var(--primary-color); color: var(--primary-color);">Cancelar Petición</button>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/client.js"></script>
+</body>
+</html>
