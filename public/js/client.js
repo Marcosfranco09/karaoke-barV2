@@ -54,7 +54,7 @@ function updateFormVisibility() {
         <p style="color: var(--text-muted);">Tu mesa ha pedido 2 canciones seguidas.</p>
         <p style="color: var(--text-muted); margin-top: 0.5rem;">Debes esperar a que otras mesas envíen sus pedidos para volver a pedir.</p>
       `;
-      document.querySelector('.container').appendChild(blockedMsg);
+      document.getElementById('request-panel').appendChild(blockedMsg);
     }
     blockedMsg.classList.remove('hidden');
   } else {

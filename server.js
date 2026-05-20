@@ -61,24 +61,46 @@ let autoplayDelay = 5; // tiempo de espera en segundos
 let karaokeRunning = false; // estado del evento
 let lastSongMode = false; // modo última canción
 let requestsEnabled = false; // habilitar/deshabilitar pedidos de clientes
-let recentRequestHistory = []; // Historial de las mesas que han pedido recientemente
+let approvalHistory = []; // Historial de las mesas que tuvieron pedidos aprobados
+
+function getPendingCount(clientId) {
+  let count = 0;
+  for (const req of pendingRequests.values()) {
+    const reqClientId = req.table ? `Mesa ${req.table}` : (req.clientName || 'Sin Nombre');
+    if (reqClientId === clientId) count++;
+  }
+  return count;
+}
+
+function getUnrefreshedApprovedCount(clientId) {
+  let count_T = 0;
+  let count_other = 0;
+  for (let i = approvalHistory.length - 1; i >= 0; i--) {
+    if (approvalHistory[i] === clientId) {
+      count_T++;
+    } else {
+      count_other++;
+    }
+    if (count_other >= 3) break;
+  }
+  return count_T;
+}
 
 function getBlockedTables() {
   const blocked = [];
-  const uniqueClients = [...new Set(recentRequestHistory)];
-  uniqueClients.forEach(clientId => {
-    let count_T = 0;
-    let count_other = 0;
-    for (let i = recentRequestHistory.length - 1; i >= 0; i--) {
-      if (recentRequestHistory[i] === clientId) {
-        count_T++;
-      } else {
-        count_other++;
-      }
-      if (count_other >= 3) break;
+  const activeClients = new Set();
+  for (const req of pendingRequests.values()) {
+    activeClients.add(req.table ? `Mesa ${req.table}` : (req.clientName || 'Sin Nombre'));
+  }
+  for (const clientId of approvalHistory) {
+    activeClients.add(clientId);
+  }
+  
+  for (const clientId of activeClients) {
+    if ((getPendingCount(clientId) + getUnrefreshedApprovedCount(clientId)) >= 2) {
+      blocked.push(clientId);
     }
-    if (count_T >= 2) blocked.push(clientId);
-  });
+  }
   return blocked;
 }
 
@@ -94,28 +116,14 @@ io.on('connection', (socket) => {
   socket.on('new-request', (data) => {
     const clientId = data.table ? `Mesa ${data.table}` : (data.clientName || 'Sin Nombre');
     
-    // --- Lógica de Límite de Pedidos ---
-    let count_T = 0;
-    let count_other = 0;
-    for (let i = recentRequestHistory.length - 1; i >= 0; i--) {
-      if (recentRequestHistory[i] === clientId) {
-        count_T++;
-      } else {
-        count_other++;
-      }
-      if (count_other >= 3) break;
-    }
-    
-    if (count_T >= 2) {
+    // --- Lógica de Límite de Pedidos (Aprobadas + Pendientes) ---
+    const totalConsumed = getPendingCount(clientId) + getUnrefreshedApprovedCount(clientId);
+    if (totalConsumed >= 2) {
       socket.emit('request-error', { 
-        message: 'Límite alcanzado: Has pedido 2 canciones seguidas. Esperá a que otras 3 mesas pidan para volver a pedir.' 
+        message: 'Límite alcanzado: Tienes 2 canciones pendientes o en cola. Esperá a que otras 3 mesas tengan aprobaciones para volver a pedir.' 
       });
       return;
     }
-    
-    recentRequestHistory.push(clientId);
-    if (recentRequestHistory.length > 100) recentRequestHistory.shift();
-    broadcastLimits();
     // -----------------------------------
 
     const id = uuidv4();
@@ -141,18 +149,9 @@ io.on('connection', (socket) => {
   socket.on('cancel-request', (requestId) => {
     // 1. Buscar en pendientes
     if (pendingRequests.has(requestId)) {
-      const reqToCancel = pendingRequests.get(requestId);
-      const clientIdToCancel = reqToCancel.table ? `Mesa ${reqToCancel.table}` : (reqToCancel.clientName || 'Sin Nombre');
-      
       pendingRequests.delete(requestId);
       io.emit('request-cancelled', requestId);
-      
-      // Reembolsar el cupo eliminando su último registro en el historial
-      const lastIndex = recentRequestHistory.lastIndexOf(clientIdToCancel);
-      if (lastIndex !== -1) {
-        recentRequestHistory.splice(lastIndex, 1);
-        broadcastLimits();
-      }
+      broadcastLimits();
     } 
     // 2. Buscar en la cola
     else {
@@ -161,13 +160,13 @@ io.on('connection', (socket) => {
         const clientIdToCancel = reqToCancel.table ? `Mesa ${reqToCancel.table}` : (reqToCancel.clientName || 'Sin Nombre');
         queue = queue.filter(req => req.id !== requestId);
         
-        // Reembolsar cupo
-        const lastIndex = recentRequestHistory.lastIndexOf(clientIdToCancel);
+        // Reembolsar de la cola aprobada eliminando su último registro en approvalHistory
+        const lastIndex = approvalHistory.lastIndexOf(clientIdToCancel);
         if (lastIndex !== -1) {
-          recentRequestHistory.splice(lastIndex, 1);
-          broadcastLimits();
+          approvalHistory.splice(lastIndex, 1);
         }
         
+        broadcastLimits();
         io.emit('queue-updated', { queue });
       }
     }
@@ -188,6 +187,11 @@ io.on('connection', (socket) => {
       
       queue.push(approvedSong);
       
+      const clientId = request.table ? `Mesa ${request.table}` : (request.clientName || 'Sin Nombre');
+      approvalHistory.push(clientId);
+      if (approvalHistory.length > 100) approvalHistory.shift();
+      broadcastLimits();
+      
       // Notificar al cliente específico
       io.to(request.socketId).emit('request-approved', { id: data.id });
       
@@ -202,6 +206,7 @@ io.on('connection', (socket) => {
     const request = pendingRequests.get(data.id);
     if (request) {
       pendingRequests.delete(data.id);
+      broadcastLimits();
       io.to(request.socketId).emit('request-rejected', { id: data.id, reason: data.reason });
     }
   });
