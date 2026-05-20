@@ -63,6 +63,29 @@ let lastSongMode = false; // modo última canción
 let requestsEnabled = false; // habilitar/deshabilitar pedidos de clientes
 let recentRequestHistory = []; // Historial de las mesas que han pedido recientemente
 
+function getBlockedTables() {
+  const blocked = [];
+  const uniqueClients = [...new Set(recentRequestHistory)];
+  uniqueClients.forEach(clientId => {
+    let count_T = 0;
+    let count_other = 0;
+    for (let i = recentRequestHistory.length - 1; i >= 0; i--) {
+      if (recentRequestHistory[i] === clientId) {
+        count_T++;
+      } else {
+        count_other++;
+      }
+      if (count_other >= 3) break;
+    }
+    if (count_T >= 2) blocked.push(clientId);
+  });
+  return blocked;
+}
+
+function broadcastLimits() {
+  io.emit('blocked-clients', getBlockedTables());
+}
+
 // Websockets
 io.on('connection', (socket) => {
   // Cuando se conecta un cliente (DJ o Screen), enviar estado inicial si es necesario
@@ -92,6 +115,7 @@ io.on('connection', (socket) => {
     
     recentRequestHistory.push(clientId);
     if (recentRequestHistory.length > 100) recentRequestHistory.shift();
+    broadcastLimits();
     // -----------------------------------
 
     const id = uuidv4();
@@ -125,7 +149,10 @@ io.on('connection', (socket) => {
       
       // Reembolsar el cupo eliminando su último registro en el historial
       const lastIndex = recentRequestHistory.lastIndexOf(clientIdToCancel);
-      if (lastIndex !== -1) recentRequestHistory.splice(lastIndex, 1);
+      if (lastIndex !== -1) {
+        recentRequestHistory.splice(lastIndex, 1);
+        broadcastLimits();
+      }
     } 
     // 2. Buscar en la cola
     else {
@@ -136,7 +163,10 @@ io.on('connection', (socket) => {
         
         // Reembolsar cupo
         const lastIndex = recentRequestHistory.lastIndexOf(clientIdToCancel);
-        if (lastIndex !== -1) recentRequestHistory.splice(lastIndex, 1);
+        if (lastIndex !== -1) {
+          recentRequestHistory.splice(lastIndex, 1);
+          broadcastLimits();
+        }
         
         io.emit('queue-updated', { queue });
       }
@@ -315,8 +345,10 @@ io.on('connection', (socket) => {
       lastSongMode,
       requestsEnabled
     });
+    socket.emit('blocked-clients', getBlockedTables());
   });
 });
+
 
 // Limpiar la carpeta tmp al iniciar el servidor (para que no queden basuras de sesiones anteriores)
 async function cleanUploadsDir() {

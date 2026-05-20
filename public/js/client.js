@@ -32,6 +32,42 @@ const splashScreen = document.getElementById('splash-screen');
 
 let currentRequestId = null;
 let currentRequestData = { name: '', song: '' };
+let serverRequestsEnabled = false;
+let isClientBlocked = false;
+
+// Función para actualizar visibilidad del formulario proactivamente
+function updateFormVisibility() {
+  let blockedMsg = document.getElementById('blocked-msg');
+  if (isClientBlocked) {
+    requestsFormContainer.classList.add('hidden');
+    requestsDisabledMsg.classList.add('hidden');
+    if (!blockedMsg) {
+      blockedMsg = document.createElement('div');
+      blockedMsg.id = 'blocked-msg';
+      blockedMsg.className = 'glass-panel';
+      blockedMsg.style.textAlign = 'center';
+      blockedMsg.style.padding = '2rem';
+      blockedMsg.style.marginTop = '2rem';
+      blockedMsg.innerHTML = `
+        <span class="material-symbols-rounded" style="font-size: 48px; color: #ff3366; margin-bottom: 1rem;">timer</span>
+        <h2 style="color: #ff3366; margin-bottom: 1rem; font-size: 1.5rem;">Límite Alcanzado</h2>
+        <p style="color: var(--text-muted);">Tu mesa ha pedido 2 canciones seguidas.</p>
+        <p style="color: var(--text-muted); margin-top: 0.5rem;">Debes esperar a que otras mesas envíen sus pedidos para volver a pedir.</p>
+      `;
+      document.querySelector('.container').appendChild(blockedMsg);
+    }
+    blockedMsg.classList.remove('hidden');
+  } else {
+    if (blockedMsg) blockedMsg.classList.add('hidden');
+    if (serverRequestsEnabled) {
+      requestsFormContainer.classList.remove('hidden');
+      requestsDisabledMsg.classList.add('hidden');
+    } else {
+      requestsFormContainer.classList.add('hidden');
+      requestsDisabledMsg.classList.remove('hidden');
+    }
+  }
+}
 
 // Función para ocultar el Splash Screen suavemente
 function hideSplash() {
@@ -212,24 +248,23 @@ socket.on('request-rejected', (data) => {
 });
 
 socket.on('requests-enabled-state', (enabled) => {
-  if (enabled) {
-    requestsFormContainer.classList.remove('hidden');
-    requestsDisabledMsg.classList.add('hidden');
-  } else {
-    requestsFormContainer.classList.add('hidden');
-    requestsDisabledMsg.classList.remove('hidden');
-  }
+  serverRequestsEnabled = enabled;
+  updateFormVisibility();
 });
 
 socket.on('initial-state', (state) => {
-  // Manejar estado de pedidos habilitados
-  if (state.requestsEnabled) {
-    requestsFormContainer.classList.remove('hidden');
-    requestsDisabledMsg.classList.add('hidden');
+  serverRequestsEnabled = state.requestsEnabled;
+  updateFormVisibility();
+});
+
+socket.on('blocked-clients', (blockedList) => {
+  const myClientId = tableNumber ? `Mesa ${tableNumber}` : (localStorage.getItem('karaoke_name') || null);
+  if (myClientId && blockedList.includes(myClientId)) {
+    isClientBlocked = true;
   } else {
-    requestsFormContainer.classList.add('hidden');
-    requestsDisabledMsg.classList.remove('hidden');
+    isClientBlocked = false;
   }
+  updateFormVisibility();
 });
 
 init();
