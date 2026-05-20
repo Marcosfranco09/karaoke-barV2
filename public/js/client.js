@@ -196,6 +196,13 @@ socket.on('request-received', (data) => {
   currentRequestId = data.id;
 });
 
+socket.on('request-error', (data) => {
+  showRequestPanel();
+  const errorMsg = document.getElementById('client-error-msg');
+  errorMsg.textContent = data.message || 'Error al procesar el pedido.';
+  errorMsg.classList.remove('hidden');
+});
+
 socket.on('request-approved', () => {
   showStatusPanel('approved');
 });
