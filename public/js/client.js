@@ -49,7 +49,7 @@ function updateFormVisibility() {
       blockedMsg.style.padding = '2rem';
       blockedMsg.style.marginTop = '2rem';
       blockedMsg.innerHTML = `
-        <span class="material-symbols-rounded" style="font-size: 48px; color: #ff3366; margin-bottom: 1rem;">timer</span>
+        <span class="material-symbols-rounded" style="font-size: 48px; color: #ff3366; margin-bottom: 1rem;">Tiempo</span>
         <h2 style="color: #ff3366; margin-bottom: 1rem; font-size: 1.5rem;">Límite Alcanzado</h2>
         <p style="color: var(--text-muted);">Tu mesa ha pedido 2 canciones seguidas.</p>
         <p style="color: var(--text-muted); margin-top: 0.5rem;">Debes esperar a que otras mesas envíen sus pedidos para volver a pedir.</p>
