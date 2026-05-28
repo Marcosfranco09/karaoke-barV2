@@ -4,8 +4,10 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs/promises');
+const fsSync = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
+const youtubeDl = require('youtube-dl-exec');
 
 const app = express();
 const server = http.createServer(app);
@@ -62,8 +64,9 @@ let karaokeRunning = false; // estado del evento
 let lastSongMode = false; // modo última canción
 let requestsEnabled = false; // habilitar/deshabilitar pedidos de clientes
 let approvalHistory = []; // Historial de las mesas que tuvieron pedidos aprobados
-let playbackVolume = 100; // volumen global de reproduccion
+let playbackVolume = 50; // volumen global de reproduccion (50 = 100% normal, 100 = 200% overdrive)
 let playbackPitch = 0; // tonalidad global en semitonos
+let prevFileToDelete = null; // archivo a borrar cuando termine la próxima canción
 
 function getPendingCount(clientId) {
   let count = 0;
@@ -118,7 +121,22 @@ io.on('connection', (socket) => {
   socket.on('new-request', (data) => {
     const clientId = data.table ? `Mesa ${data.table}` : (data.clientName || 'Sin Nombre');
     const isDjManualRequest = data.source === 'dj-manual' || data.table === 'DJ';
-    
+    const clientIP = socket.handshake.address;
+
+    // --- Bloqueo por IP: mismo dispositivo no puede tener otro pedido activo ---
+    if (!isDjManualRequest) {
+      const hasActiveByIP = [...pendingRequests.values()].some(r => r.clientIP === clientIP)
+        || queue.some(r => r.clientIP === clientIP)
+        || (nowPlaying && nowPlaying.clientIP === clientIP);
+      if (hasActiveByIP) {
+        socket.emit('request-error', {
+          message: 'Ya tenés un pedido activo desde este dispositivo. Esperá a que termine para pedir de nuevo.'
+        });
+        return;
+      }
+    }
+    // -----------------------------------------------------------------------
+
     // --- Lógica de Límite de Pedidos (Aprobadas + Pendientes) ---
     const totalConsumed = getPendingCount(clientId) + getUnrefreshedApprovedCount(clientId);
     if (!isDjManualRequest && totalConsumed >= 2) {
@@ -132,11 +150,12 @@ io.on('connection', (socket) => {
     const id = uuidv4();
     const request = {
       id,
-      socketId: socket.id, // para responderle a este cliente
+      socketId: socket.id,
+      clientIP,
       clientName: data.clientName,
       table: data.table || '',
       song: data.song,
-      observation: data.observation || '', // Capturar observación del cliente
+      observation: data.observation || '',
       source: data.source || 'client',
       user: data.user || null,
       timestamp: Date.now()
@@ -175,6 +194,23 @@ io.on('connection', (socket) => {
         io.emit('queue-updated', { queue });
       }
     }
+  });
+
+  // Cliente verifica estado de un request previo (post-recarga)
+  socket.on('check-request-status', (requestId, callback) => {
+    const pending = pendingRequests.get(requestId);
+    if (pending) {
+      pending.socketId = socket.id;
+      return callback({ status: 'pending', request: pending });
+    }
+    const queued = queue.find(item => item.id === requestId);
+    if (queued) {
+      return callback({ status: 'queued', request: queued });
+    }
+    if (nowPlaying && nowPlaying.id === requestId) {
+      return callback({ status: 'playing', request: nowPlaying });
+    }
+    callback({ status: 'not_found' });
   });
 
   // DJ aprueba solicitud
@@ -216,6 +252,36 @@ io.on('connection', (socket) => {
     }
   });
 
+  // DJ edita un elemento ya en cola
+  socket.on('edit-queue-item', (data) => {
+    const itemIndex = queue.findIndex(item => item.id === data.id);
+    if (itemIndex !== -1) {
+      queue[itemIndex] = { ...queue[itemIndex], ...data.updates };
+      io.emit('queue-updated', { queue });
+    }
+  });
+
+  // DJ elimina un elemento de la cola
+  socket.on('remove-queue-item', (id) => {
+    const itemIndex = queue.findIndex(item => item.id === id);
+    if (itemIndex !== -1) {
+      queue.splice(itemIndex, 1);
+      io.emit('queue-updated', { queue });
+    }
+  });
+
+  // DJ reordena la cola (mover a un índice específico por drag-and-drop)
+  socket.on('reorder-queue', (data) => {
+    // data: { id, newIndex }
+    const index = queue.findIndex(item => item.id === data.id);
+    if (index === -1) return;
+    
+    // Remover del índice actual y colocar en el nuevo índice
+    const [item] = queue.splice(index, 1);
+    queue.splice(data.newIndex, 0, item);
+    io.emit('queue-updated', { queue });
+  });
+
   function playNextLogic() {
     if (nowPlaying) {
       history.push(nowPlaying);
@@ -232,8 +298,22 @@ io.on('connection', (socket) => {
     }
   }
 
+  // Programar borrado del archivo de la canción actual para después de la próxima
+  function scheduleFileCleanup() {
+    // Borrar archivo pendiente de la anteúltima canción
+    if (prevFileToDelete) {
+      fsSync.unlink(prevFileToDelete, () => {});
+      prevFileToDelete = null;
+    }
+    // Programar borrado del archivo actual
+    if (nowPlaying && nowPlaying.type === 'file' && nowPlaying.resourceUrl && nowPlaying.resourceUrl.startsWith('/uploads/')) {
+      prevFileToDelete = path.join(UPLOADS_DIR, nowPlaying.resourceUrl.replace('/uploads/', ''));
+    }
+  }
+
   // DJ o Screen pide reproducir la siguiente manualmente
   socket.on('play-next', () => {
+    scheduleFileCleanup();
     if (!karaokeRunning) {
       karaokeRunning = true;
       io.emit('karaoke-running-state', karaokeRunning);
@@ -243,6 +323,22 @@ io.on('connection', (socket) => {
 
   // La pantalla avisa que terminó la canción actual
   socket.on('song-ended', () => {
+    scheduleFileCleanup();
+
+    // Notificar al cliente cuya canción terminó
+    if (nowPlaying && nowPlaying.socketId) {
+      io.to(nowPlaying.socketId).emit('your-song-played');
+    }
+
+    // Liberar la mesa en approvalHistory para que pueda pedir de nuevo
+    if (nowPlaying) {
+      const playedClientId = nowPlaying.table ? `Mesa ${nowPlaying.table}` : (nowPlaying.clientName || 'Sin Nombre');
+      const lastIdx = approvalHistory.lastIndexOf(playedClientId);
+      if (lastIdx !== -1) {
+        approvalHistory.splice(lastIdx, 1);
+      }
+      broadcastLimits();
+    }
     if (lastSongMode) {
       // Si era la última canción, parar el karaoke
       karaokeRunning = false;
@@ -353,6 +449,93 @@ io.on('connection', (socket) => {
     nowPlaying = null;
     io.emit('queue-updated', { queue });
     io.emit('now-playing', null);
+  });
+
+  // DJ descarga video de YouTube (se usa como archivo local)
+  socket.on('download-youtube', async (data) => {
+    const { id, youtubeUrl } = data;
+    const request = pendingRequests.get(id);
+    if (!request) return;
+
+    const filename = `${uuidv4()}.mp4`;
+    const filePath = path.join(UPLOADS_DIR, filename);
+
+    try {
+      let lastErr = null;
+      const methods = [
+        { name: 'android', opts: { extractorArgs: 'youtube:player_client=android' } },
+        { name: 'edge cookies', opts: { cookiesFromBrowser: 'edge' } },
+        { name: 'chrome cookies', opts: { cookiesFromBrowser: 'chrome' } },
+        { name: 'ios', opts: { extractorArgs: 'youtube:player_client=ios' } },
+      ];
+
+      for (const { name, opts } of methods) {
+        try {
+          const child = youtubeDl.exec(youtubeUrl, {
+            format: '22/18', // 720p, fallback a 360p
+            output: filePath,
+            noPlaylist: true,
+            ...opts,
+          });
+
+          if (child.stderr) {
+            child.stderr.on('data', (chunk) => {
+              const text = chunk.toString();
+              const match = text.match(/(\d+(?:\.\d+)?)%/);
+              if (match) {
+                socket.emit('download-progress', { id, percentage: parseInt(match[1]) });
+              }
+            });
+          }
+
+          await child;
+          lastErr = null;
+          break;
+        } catch (err) {
+          lastErr = err;
+          const stderr = (err.stderr || '').substring(0, 200);
+          console.log(`Download with ${name} failed:`, stderr);
+        }
+      }
+
+      if (lastErr) throw lastErr;
+
+      const fileUrl = `/uploads/${filename}`;
+      socket.emit('download-complete', { id, fileUrl });
+
+      // Auto-aprobar
+      pendingRequests.delete(id);
+      const approvedSong = {
+        ...request,
+        resourceUrl: fileUrl,
+        type: 'file'
+      };
+      queue.push(approvedSong);
+
+      const clientId = request.table ? `Mesa ${request.table}` : (request.clientName || 'Sin Nombre');
+      approvalHistory.push(clientId);
+      if (approvalHistory.length > 100) approvalHistory.shift();
+      broadcastLimits();
+
+      io.to(request.socketId).emit('request-approved', { id });
+      io.emit('queue-updated', { queue });
+
+    } catch (err) {
+      console.error('Error descargando YouTube:', err.message?.substring(0, 200));
+      const stderr = (err.stderr || err.message || '').toString();
+      console.error('STDERR:', stderr.substring(0, 500));
+      
+      let msg = 'Error al descargar el video de YouTube';
+      if (stderr.includes('cookies') || stderr.includes('Permission') || stderr.includes('locked')) {
+        msg = 'Cerrá Edge/Chrome completamente y volvé a intentar.';
+      } else if (stderr.includes('Private video')) msg = 'El video es privado';
+      else if (stderr.includes('copyright')) msg = 'El video tiene restricción de copyright';
+      else if (stderr.includes('Sign in') || stderr.includes('LOGIN_REQUIRED')) msg = 'Iniciá sesión en YouTube desde Edge, cerralo, y probá de nuevo.';
+      socket.emit('download-error', { id, message: msg });
+
+      // Limpiar archivo si quedó a medio descargar
+      fsSync.unlink(filePath, () => {});
+    }
   });
 
   // Sincronización inicial para DJ / Screen que se recarga

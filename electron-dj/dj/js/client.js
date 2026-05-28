@@ -54,10 +54,31 @@ function init() {
   if (savedName) {
     inputName.value = savedName;
   }
-  
+
   if (tableNumber) {
     document.getElementById('table-num').textContent = tableNumber;
     document.getElementById('table-badge').classList.remove('hidden');
+  }
+
+  // Restaurar estado de petición previa
+  const storedId = localStorage.getItem('karaoke_request_id');
+  if (storedId) {
+    currentRequestId = storedId;
+    const storedSong = localStorage.getItem('karaoke_request_song') || '';
+    const storedName = localStorage.getItem('karaoke_name') || '';
+    currentRequestData = { name: storedName, song: storedSong };
+
+    socket.emit('check-request-status', storedId, (res) => {
+      if (res.status === 'pending') {
+        showStatusPanel('loading');
+      } else if (res.status === 'queued' || res.status === 'playing') {
+        showStatusPanel('approved');
+      } else {
+        localStorage.removeItem('karaoke_request_id');
+        localStorage.removeItem('karaoke_request_song');
+        currentRequestId = null;
+      }
+    });
   }
 }
 
@@ -85,12 +106,12 @@ function showStatusPanel(state, message = '') {
     btnCancelRequest.classList.remove('hidden');
     approvedCard.classList.add('hidden');
   } else if (state === 'approved') {
-    statusTitle.textContent = 'PEDIDO APROBADO';
+    statusTitle.textContent = 'PETICIÓN ACEPTADA';
     statusTitle.style.background = 'linear-gradient(to right, #00ff88, #00b3ff)';
     statusTitle.style.webkitBackgroundClip = 'text';
-    statusMessage.textContent = 'Tu canción ya está en la cola.';
+    statusMessage.innerHTML = 'Tu canción ya está en la cola.<br><small style="font-size:0.8rem;opacity:0.7;">Una vez que termines de cantar podrás volver a solicitar la canción.</small>';
     statusLoader.classList.add('hidden');
-    btnNewRequest.classList.remove('hidden');
+    btnNewRequest.classList.add('hidden');
     btnCancelRequest.classList.remove('hidden');
     
     // Mostrar la card con info
@@ -180,6 +201,8 @@ obsToggle.addEventListener('change', () => {
 
 btnNewRequest.addEventListener('click', () => {
   currentRequestId = null;
+  localStorage.removeItem('karaoke_request_id');
+  localStorage.removeItem('karaoke_request_song');
   showRequestPanel();
 });
 
@@ -188,12 +211,16 @@ btnCancelRequest.addEventListener('click', () => {
     socket.emit('cancel-request', currentRequestId);
     showStatusPanel('cancelled');
     currentRequestId = null;
+    localStorage.removeItem('karaoke_request_id');
+    localStorage.removeItem('karaoke_request_song');
   }
 });
 
 // Eventos de Socket.IO
 socket.on('request-received', (data) => {
   currentRequestId = data.id;
+  localStorage.setItem('karaoke_request_id', data.id);
+  localStorage.setItem('karaoke_request_song', currentRequestData.song);
 });
 
 socket.on('request-approved', () => {
@@ -202,6 +229,22 @@ socket.on('request-approved', () => {
 
 socket.on('request-rejected', (data) => {
   showStatusPanel('rejected', data.reason);
+});
+
+socket.on('request-error', (data) => {
+  showRequestPanel();
+  const errorMsg = document.getElementById('client-error-msg');
+  if (errorMsg) {
+    errorMsg.textContent = data.message || 'Error al procesar el pedido.';
+    errorMsg.classList.remove('hidden');
+  }
+});
+
+socket.on('your-song-played', () => {
+  currentRequestId = null;
+  localStorage.removeItem('karaoke_request_id');
+  localStorage.removeItem('karaoke_request_song');
+  showRequestPanel();
 });
 
 socket.on('requests-enabled-state', (enabled) => {

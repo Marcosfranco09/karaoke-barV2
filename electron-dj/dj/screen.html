@@ -40,9 +40,6 @@
         <p style="font-size: 1.5rem; color: var(--text-muted); margin-top: 1rem;">¡Escaneá el QR y pedí tu canción!</p>
       </div>
 
-      <!-- Reproductor YouTube -->
-      <div id="yt-player" class="hidden" style="width: 100%; height: 100%;"></div>
-
       <!-- Reproductor HTML5 -->
       <video id="html-player" class="hidden" style="width: 100%; height: 100%;"></video>
       <audio id="audio-player" class="hidden" style="width: 80%;"></audio>
@@ -52,8 +49,7 @@
         style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
         <h2 style="font-size: 2.5rem; color: var(--primary-color); margin-bottom: 1.5rem;">Siguiente en cantar:</h2>
         <h1 id="next-song-title" style="font-size: 4rem; margin-bottom: 1rem; color: #fff;"></h1>
-        <p style="font-size: 2rem; color: var(--text-light);">De: <strong id="next-client-name"></strong> <span
-            id="next-table-info" style="color: var(--text-muted); font-size: 1.5rem;"></span></p>
+        <p><span id="next-table-info" style="font-size: 2rem; color: var(--primary-color);"></span></p>
       </div>
 
       <!-- Overlay de Error de Video -->
@@ -65,7 +61,7 @@
       </div>
     </div>
 
-    <div class="queue-section" style="display: flex; flex-direction: column;">
+    <div class="queue-section">
       <h2 id="queue-label"
         style="margin-bottom: 2rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 1rem;">
         Siguientes en la lista
@@ -84,8 +80,6 @@
     document.write('<script src="' + window.djConfig.serverUrl + '/socket.io/socket.io.js"></' + 'script>');
   </script>
   <script src="js/screen.js"></script>
-  <!-- API de YouTube Iframe se carga después de definir los callbacks -->
-  <script src="https://www.youtube.com/iframe_api"></script>
 </body>
 
 </html>

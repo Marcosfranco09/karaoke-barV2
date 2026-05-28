@@ -9,8 +9,6 @@ const screenQueue = document.getElementById('screen-queue');
 const queueLabel = document.getElementById('queue-label');
 const queueDisabledMsg = document.getElementById('queue-disabled-msg');
 
-let ytPlayer;
-let ytReady = false;
 let autoplayEnabled = false;
 let autoplayDelay = 5;
 let playbackVolume = 50;
@@ -22,28 +20,73 @@ let htmlAudioGraph = null;
 let audioAudioGraph = null;
 
 const pauseOverlay = document.getElementById('pause-overlay');
+const queueSection = document.querySelector('.queue-section');
 
-// Configuración de YouTube iframe API
-function onYouTubeIframeAPIReady() {
-  ytPlayer = new YT.Player('yt-player', {
-    height: '100%',
-    width: '100%',
-    videoId: '',
-    playerVars: {
-      'autoplay': 1,
-      'controls': 0,
-      'rel': 0,
-      'disablekb': 1,
-      'modestbranding': 1,
-      'iv_load_policy': 3
-    },
-    events: {
-      'onStateChange': onPlayerStateChange,
-      'onError': onPlayerError
+let sidebarVisible = false;
+let sidebarHideTimeout = null;
+let sidebarMonitorInterval = null;
+
+function showSidebar() {
+  if (sidebarVisible) return;
+  sidebarVisible = true;
+  queueSection.classList.remove('sidebar-hidden');
+}
+
+function hideSidebar() {
+  if (!sidebarVisible) return;
+  sidebarVisible = false;
+  queueSection.classList.add('sidebar-hidden');
+}
+
+function clearSidebarTiming() {
+  clearTimeout(sidebarHideTimeout);
+  clearInterval(sidebarMonitorInterval);
+  sidebarHideTimeout = null;
+  sidebarMonitorInterval = null;
+}
+
+function getVideoProgress() {
+  if (!htmlPlayer.classList.contains('hidden')) {
+    return { currentTime: htmlPlayer.currentTime, duration: htmlPlayer.duration };
+  }
+  return null;
+}
+
+function startSidebarMonitor() {
+  clearInterval(sidebarMonitorInterval);
+  sidebarMonitorInterval = setInterval(() => {
+    const prog = getVideoProgress();
+    if (!prog || prog.duration <= 0) return;
+    const remaining = prog.duration - prog.currentTime;
+    if (remaining <= 10 && prog.currentTime > 10) {
+      showSidebar();
     }
-  });
-  ytReady = true;
-  applyPlaybackSettings();
+  }, 500);
+}
+
+function startSidebarTiming() {
+  clearSidebarTiming();
+  showSidebar();
+
+  const prog = getVideoProgress();
+  const duration = prog ? prog.duration : 0;
+
+  if (duration <= 0) {
+    let retry = setInterval(() => {
+      const p = getVideoProgress();
+      if (p && p.duration > 0) {
+        clearInterval(retry);
+        if (p.duration > 20) {
+          sidebarHideTimeout = setTimeout(hideSidebar, 10000);
+          startSidebarMonitor();
+        }
+      }
+    }, 500);
+    sidebarHideTimeout = setTimeout(() => { hideSidebar(); clearInterval(retry); }, 10000);
+  } else if (duration > 20) {
+    sidebarHideTimeout = setTimeout(hideSidebar, 10000);
+    startSidebarMonitor();
+  }
 }
 
 function createPitchShifter(context) {
@@ -178,20 +221,6 @@ function applyPlaybackSettings() {
     audioAudioGraph.shifter.setPitch(playbackPitch);
   }
 
-  if (ytReady && ytPlayer) {
-    const ytVolume = Math.min(100, playbackVolume * 2);
-    if (ytPlayer.setVolume) ytPlayer.setVolume(ytVolume);
-  }
-}
-
-function onPlayerError(event) {
-  let msg = 'Error en YouTube';
-  if (event.data === 2) msg = 'Link de YouTube inválido';
-  if (event.data === 100) msg = 'Video no encontrado o privado';
-  if (event.data === 101 || event.data === 150) msg = 'El video no permite reproducción en sitios externos';
-  
-  socket.emit('screen-error', msg);
-  showErrorOverlay();
 }
 
 function showErrorOverlay() {
@@ -205,18 +234,12 @@ function showErrorOverlay() {
   }, 5000);
 }
 
-// Detectar cuando termina una canción (YouTube)
-function onPlayerStateChange(event) {
-  if (event.data === YT.PlayerState.ENDED) {
-    handleSongEnd();
-  }
-}
-
-// Detectar cuando termina una canción (HTML5)
+// Detectar cuando termina una canción
 htmlPlayer.addEventListener('ended', handleSongEnd);
 audioPlayer.addEventListener('ended', handleSongEnd);
 
 function handleSongEnd() {
+  clearSidebarTiming();
   socket.emit('song-ended');
 }
 
@@ -230,24 +253,13 @@ function updatePauseOverlay() {
 }
 
 function showIdle() {
+  clearSidebarTiming();
   idleMessage.classList.remove('hidden');
-  document.getElementById('yt-player').classList.add('hidden');
   htmlPlayer.classList.add('hidden');
   audioPlayer.classList.add('hidden');
   document.getElementById('error-overlay').classList.add('hidden');
-  
-  if (ytReady && ytPlayer && ytPlayer.stopVideo) {
-    ytPlayer.stopVideo();
-  }
   htmlPlayer.pause();
   audioPlayer.pause();
-}
-
-// Extraer ID de YouTube de un link
-function extractVideoID(url) {
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-  const match = url.match(regExp);
-  return (match && match[2].length === 11) ? match[2] : null;
 }
 
 function playSong(song) {
@@ -261,28 +273,14 @@ function playSong(song) {
   // Mostrar overlay de transición
   const overlay = document.getElementById('next-overlay');
   document.getElementById('next-song-title').textContent = song.song;
-  document.getElementById('next-client-name').textContent = song.clientName;
-  document.getElementById('next-table-info').textContent = song.table ? `(Mesa ${song.table})` : '';
+  document.getElementById('next-table-info').textContent = song.table ? `Mesa ${song.table}` : '';
   
   overlay.classList.remove('hidden');
   
   transitionTimeout = setTimeout(() => {
     overlay.classList.add('hidden');
 
-    if (song.type === 'youtube') {
-      const videoId = extractVideoID(song.resourceUrl);
-      if (videoId && ytReady) {
-        document.getElementById('yt-player').classList.remove('hidden');
-        ytPlayer.loadVideoById({ videoId: videoId, suggestedQuality: 'hd1080' });
-        applyPlaybackSettings();
-        if (playbackPitch !== 0) {
-          socket.emit('screen-error', 'La tonalidad real solo se aplica a archivos locales, no a YouTube.');
-        }
-      } else {
-        socket.emit('screen-error', "Link de YouTube no válido o API no lista");
-        showErrorOverlay();
-      }
-    } else if (song.type === 'file') {
+    if (song.type === 'file') {
       const ext = song.resourceUrl.split('.').pop().toLowerCase();
       const fullUrl = song.resourceUrl.startsWith('http') ? song.resourceUrl : window.djConfig.serverUrl + song.resourceUrl;
       
@@ -301,6 +299,8 @@ function playSong(song) {
         audioPlayer.play();
       }
     }
+
+    setTimeout(startSidebarTiming, 500);
   }, autoplayDelay * 1000);
 }
 
@@ -318,7 +318,7 @@ function renderQueue(queue) {
       <div class="rank">#${index + 1}</div>
       <div class="info">
         <h4 style="font-size: 1.2rem;">${item.song}</h4>
-        <p style="font-size: 1rem;">${item.clientName} (Mesa ${item.table || '-'})</p>
+        <p style="font-size: 1rem; color: var(--primary-color);">${item.table ? `Mesa ${item.table}` : ''}</p>
       </div>
     `;
     screenQueue.appendChild(div);
@@ -405,15 +405,7 @@ socket.on('now-playing', (song) => {
 });
 
 socket.on('toggle-play', () => {
-  if (!document.getElementById('yt-player').classList.contains('hidden')) {
-    if (ytReady && ytPlayer && ytPlayer.getPlayerState) {
-      if (ytPlayer.getPlayerState() === 1) {
-        ytPlayer.pauseVideo();
-      } else {
-        ytPlayer.playVideo();
-      }
-    }
-  } else if (!htmlPlayer.classList.contains('hidden')) {
+  if (!htmlPlayer.classList.contains('hidden')) {
     if (htmlPlayer.paused) htmlPlayer.play();
     else htmlPlayer.pause();
   } else if (!audioPlayer.classList.contains('hidden')) {

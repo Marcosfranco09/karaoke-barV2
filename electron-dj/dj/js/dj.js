@@ -30,6 +30,11 @@ const manualModal = document.getElementById('manual-modal');
 const manualForm = document.getElementById('manual-form');
 const btnManualCancel = document.getElementById('btn-manual-cancel');
 
+// Referencias al DOM - Edición de Cola
+const editQueueModal = document.getElementById('edit-queue-modal');
+const editQueueForm = document.getElementById('edit-queue-form');
+const editQueueId = document.getElementById('edit-queue-id');
+const editQueueTable = document.getElementById('edit-queue-table');
 // Botón: Cerrar aplicación
 const btnLogout = document.getElementById('btn-logout');
 btnLogout.addEventListener('click', () => {
@@ -227,20 +232,62 @@ function animateAndRemove(id, direction = 'right') {
   }
 }
 
+let sortableQueue = null;
+let isDraggingQueueItem = false;
+let pendingQueueUpdate = false;
+
+function initSortableQueue() {
+  if (sortableQueue) sortableQueue.destroy();
+  sortableQueue = Sortable.create(queueContainer, {
+    handle: '.drag-handle',
+    animation: 150,
+    ghostClass: 'sortable-ghost',
+    dragClass: 'sortable-drag',
+    onStart: function () {
+      isDraggingQueueItem = true;
+    },
+    onEnd: function (evt) {
+      isDraggingQueueItem = false;
+      const itemId = evt.item.dataset.id;
+      if (evt.oldIndex !== evt.newIndex) {
+        socket.emit('reorder-queue', { id: itemId, newIndex: evt.newIndex });
+      } else if (pendingQueueUpdate) {
+        renderQueue();
+      }
+      pendingQueueUpdate = false;
+    }
+  });
+}
+
 function renderQueue() {
+  // Guardamos un mapa de IDs a nodos actuales para no rehacer todo el DOM si no es necesario,
+  // pero para mayor seguridad, vamos a limpiarlo por ahora y dejar que SortableJS lo maneje.
   queueContainer.innerHTML = '';
   queue.forEach((item, index) => {
     const div = document.createElement('div');
     div.className = 'queue-item fade-in';
+    div.dataset.id = item.id;
+    
     div.innerHTML = `
-      <div class="rank">#${index + 1}</div>
-      <div class="info" style="text-align: center; flex: 1;">
-        <h4 style="margin:0; font-size: 1.1rem;">${item.song}</h4>
-        <p style="margin:0; font-size: 0.9rem; opacity: 0.8;">${item.clientName} (Mesa ${item.table || '-'})</p>
+      <div class="drag-handle" style="display: flex; align-items: center; justify-content: center; cursor: grab; padding-right: 0.5rem; color: var(--text-muted);" onmousedown="this.style.cursor='grabbing'" onmouseup="this.style.cursor='grab'">
+        <span class="material-symbols-rounded">drag_indicator</span>
       </div>
-      <div style="display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
-        <div class="badge" style="background: rgba(255,255,255,0.1); border: 1px solid var(--glass-border); font-size: 0.65rem;">${item.type === 'youtube' ? 'YT' : 'FILE'}</div>
-        <button class="btn-danger" style="padding: 0.4rem; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; background: rgba(255, 51, 102, 0.15); border: 1px solid var(--primary-color); color: var(--primary-color);" onclick="removeFromQueue('${item.id}')" title="Eliminar de la cola">
+      <div class="rank">#${index + 1}</div>
+      <div class="info" style="text-align: center; flex: 1; padding: 0 0.5rem;">
+        <h4 style="margin:0; font-size: 1.1rem; word-break: break-word;">${item.song}</h4>
+        <p style="margin:0; font-size: 0.9rem; opacity: 0.8;">
+          ${item.clientName}
+          <span
+            class="queue-table-badge"
+            onclick="openEditQueueModal('${item.id}')"
+            title="Toca para cambiar mesa"
+            style="display:inline-flex; align-items:center; gap:2px; margin-left:4px; cursor:pointer; background:rgba(255,204,0,0.12); border:1px solid rgba(255,204,0,0.4); border-radius:20px; padding:1px 8px; font-size:0.8rem; color:var(--primary-color); transition:background 0.2s;"
+          >Mesa ${item.table || '-'} <span class="material-symbols-rounded" style="font-size:0.85rem;">edit</span></span>
+        </p>
+        ${item.observation ? `<p style="margin:0; font-size: 0.8rem; color: #ffcc00; margin-top: 2px;">Obs: ${item.observation}</p>` : ''}
+      </div>
+      <div style="display: flex; gap: 0.3rem; align-items: center;">
+        <button class="btn-danger" onclick="removeFromQueue('${item.id}')" style="width:36px; height:36px; padding:0; border-radius: 8px; background: rgba(255, 51, 102, 0.15); border: 1px solid #ff3366; color: #ff3366; display:flex; align-items:center; justify-content:center;" title="Eliminar de la cola">
           <span class="material-symbols-rounded" style="font-size: 1.2rem;">delete</span>
         </button>
       </div>
@@ -248,6 +295,7 @@ function renderQueue() {
     queueContainer.appendChild(div);
   });
   queueCount.textContent = queue.length;
+  initSortableQueue();
 }
 
 window.removeFromQueue = (id) => {
@@ -299,19 +347,17 @@ window.approveRequest = async (id) => {
       return;
     }
   } else {
-    // Es YouTube
+    // Es YouTube: descargar y usar como archivo local
     if (!isValidYouTubeUrl(ytInput)) {
       showToast('El link de YouTube no parece ser válido.', 'error');
       return;
     }
 
-    socket.emit('approve-request', {
-      id,
-      youtubeUrl: ytInput,
-      type: 'youtube',
-      clientName: req.clientName
-    });
-    animateAndRemove(id, 'right');
+    const btn = document.querySelector(`button[onclick="approveRequest('${id}')"]`);
+    btn.textContent = 'Descargando...';
+    btn.disabled = true;
+
+    socket.emit('download-youtube', { id, youtubeUrl: ytInput });
   }
 };
 
@@ -558,17 +604,23 @@ manualObsToggle.addEventListener('change', () => {
 manualForm.addEventListener('submit', (e) => {
   e.preventDefault();
   
-  const clientName = capitalizeWords(document.getElementById('manual-client').value.trim());
+  const tableNumber = document.getElementById('manual-table').value.trim();
+  const clientName = capitalizeWords(document.getElementById('manual-client-name').value.trim());
   const songName = capitalizeWords(document.getElementById('manual-song').value.trim());
   const artistName = capitalizeWords(document.getElementById('manual-artist').value.trim());
+  
+  if (!tableNumber) {
+    showToast('Ingresá el número de mesa', 'error');
+    return;
+  }
   
   const fullSongName = artistName ? `${songName} - ${artistName}` : songName;
   
   socket.emit('new-request', {
-    clientName,
+    clientName: clientName || `Mesa ${tableNumber}`,
     song: fullSongName,
     observation: manualObsToggle.checked ? inputManualObs.value.trim() : '',
-    table: 'DJ', // Distintivo para peticiones manuales
+    table: tableNumber,
     source: 'dj-manual'
   });
   
@@ -603,7 +655,11 @@ socket.on('request-incoming', (req) => {
 
 socket.on('queue-updated', (data) => {
   queue = data.queue;
-  renderQueue();
+  if (isDraggingQueueItem) {
+    pendingQueueUpdate = true;
+  } else {
+    renderQueue();
+  }
 });
 
 socket.on('autoplay-state', (state) => {
@@ -635,6 +691,28 @@ socket.on('last-song-state', (state) => {
 
 socket.on('requests-enabled-state', (state) => {
   requestsSwitch.checked = state;
+});
+
+// Eventos de descarga de YouTube
+socket.on('download-progress', (data) => {
+  const btn = document.querySelector(`button[onclick="approveRequest('${data.id}')"]`);
+  if (btn) {
+    btn.textContent = `Descargando ${data.percentage}%`;
+  }
+});
+
+socket.on('download-complete', (data) => {
+  animateAndRemove(data.id, 'right');
+  showToast('Video descargado y agregado a la cola', 'success');
+});
+
+socket.on('download-error', (data) => {
+  const btn = document.querySelector(`button[onclick="approveRequest('${data.id}')"]`);
+  if (btn) {
+    btn.textContent = 'Aprobar';
+    btn.disabled = false;
+  }
+  showToast(data.message || 'Error al descargar video', 'error');
 });
 
 // Init
@@ -721,4 +799,32 @@ window.addEventListener('drop', (event) => {
   if (setRequestFile(activeRequestId, file)) {
     showToast(`Archivo cargado: ${file.name}`, 'success');
   }
+});
+
+// Lógica de Edición de Mesa
+window.openEditQueueModal = (id) => {
+  const item = queue.find(q => q.id === id);
+  if (!item) return;
+  editQueueId.value = item.id;
+  editQueueTable.value = item.table || '';
+  editQueueModal.classList.add('active');
+  setTimeout(() => editQueueTable.focus(), 100);
+};
+
+window.closeEditQueueModal = () => {
+  editQueueModal.classList.remove('active');
+  editQueueForm.reset();
+};
+
+editQueueForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const id = editQueueId.value;
+  const table = editQueueTable.value.trim();
+  if (!table) {
+    showToast('Ingresá un número de mesa', 'error');
+    return;
+  }
+  socket.emit('edit-queue-item', { id, updates: { table } });
+  closeEditQueueModal();
+  showToast('Mesa actualizada', 'success');
 });
