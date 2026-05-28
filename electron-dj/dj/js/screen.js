@@ -13,7 +13,7 @@ let ytPlayer;
 let ytReady = false;
 let autoplayEnabled = false;
 let autoplayDelay = 5;
-let playbackVolume = 100;
+let playbackVolume = 50;
 let playbackPitch = 0;
 let karaokeRunning = false;
 let transitionTimeout;
@@ -351,7 +351,7 @@ socket.on('initial-state', (state) => {
 
   autoplayEnabled = state.autoplayEnabled;
   autoplayDelay = state.autoplayDelay || 5;
-  playbackVolume = state.playbackVolume ?? 100;
+  playbackVolume = state.playbackVolume ?? 50;
   playbackPitch = state.playbackPitch ?? 0;
   karaokeRunning = state.karaokeRunning;
   applyPlaybackSettings();
