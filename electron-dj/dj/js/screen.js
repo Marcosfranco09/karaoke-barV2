@@ -160,23 +160,27 @@ function ensureAudioGraph(mediaElement, existingGraph) {
 }
 
 function applyPlaybackSettings() {
-  const volume = Math.max(0, Math.min(1, playbackVolume / 100));
+  // El marcador va de 0 a 100. Queremos que 50 sea el 100% real (ganancia 1.0) y 100 sea 2.0 (Boost).
+  const linearGain = playbackVolume / 50;
+  const boundedVolume = Math.max(0, Math.min(1, linearGain));
+
   htmlPlayer.playbackRate = 1;
   audioPlayer.playbackRate = 1;
-  htmlPlayer.volume = htmlAudioGraph ? 1 : volume;
-  audioPlayer.volume = audioAudioGraph ? 1 : volume;
+  htmlPlayer.volume = htmlAudioGraph ? 1 : boundedVolume;
+  audioPlayer.volume = audioAudioGraph ? 1 : boundedVolume;
 
   if (htmlAudioGraph) {
-    htmlAudioGraph.volume.gain.value = volume;
+    htmlAudioGraph.volume.gain.value = linearGain;
     htmlAudioGraph.shifter.setPitch(playbackPitch);
   }
   if (audioAudioGraph) {
-    audioAudioGraph.volume.gain.value = volume;
+    audioAudioGraph.volume.gain.value = linearGain;
     audioAudioGraph.shifter.setPitch(playbackPitch);
   }
 
   if (ytReady && ytPlayer) {
-    if (ytPlayer.setVolume) ytPlayer.setVolume(playbackVolume);
+    const ytVolume = Math.min(100, playbackVolume * 2);
+    if (ytPlayer.setVolume) ytPlayer.setVolume(ytVolume);
   }
 }
 
