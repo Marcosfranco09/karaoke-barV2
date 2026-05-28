@@ -62,6 +62,8 @@ let karaokeRunning = false; // estado del evento
 let lastSongMode = false; // modo última canción
 let requestsEnabled = false; // habilitar/deshabilitar pedidos de clientes
 let approvalHistory = []; // Historial de las mesas que tuvieron pedidos aprobados
+let playbackVolume = 100; // volumen global de reproduccion
+let playbackPitch = 0; // tonalidad global en semitonos
 
 function getPendingCount(clientId) {
   let count = 0;
@@ -115,10 +117,11 @@ io.on('connection', (socket) => {
   // Cliente solicita canción
   socket.on('new-request', (data) => {
     const clientId = data.table ? `Mesa ${data.table}` : (data.clientName || 'Sin Nombre');
+    const isDjManualRequest = data.source === 'dj-manual' || data.table === 'DJ';
     
     // --- Lógica de Límite de Pedidos (Aprobadas + Pendientes) ---
     const totalConsumed = getPendingCount(clientId) + getUnrefreshedApprovedCount(clientId);
-    if (totalConsumed >= 2) {
+    if (!isDjManualRequest && totalConsumed >= 2) {
       socket.emit('request-error', { 
         message: 'Límite alcanzado: Tienes 2 canciones pendientes o en cola. Esperá a que otras 3 mesas tengan aprobaciones para volver a pedir.' 
       });
@@ -134,6 +137,8 @@ io.on('connection', (socket) => {
       table: data.table || '',
       song: data.song,
       observation: data.observation || '', // Capturar observación del cliente
+      source: data.source || 'client',
+      user: data.user || null,
       timestamp: Date.now()
     };
     pendingRequests.set(id, request);
@@ -296,6 +301,18 @@ io.on('connection', (socket) => {
     io.emit('autoplay-delay-state', autoplayDelay);
   });
 
+  // DJ ajusta el volumen global de reproduccion
+  socket.on('set-playback-volume', (value) => {
+    playbackVolume = Math.max(0, Math.min(100, Number(value) || 0));
+    io.emit('playback-volume-state', playbackVolume);
+  });
+
+  // DJ ajusta la tonalidad global
+  socket.on('set-playback-pitch', (value) => {
+    playbackPitch = Math.max(-6, Math.min(6, Number(value) || 0));
+    io.emit('playback-pitch-state', playbackPitch);
+  });
+
   // DJ arranca o detiene el karaoke
   socket.on('toggle-karaoke', () => {
     karaokeRunning = !karaokeRunning;
@@ -346,6 +363,8 @@ io.on('connection', (socket) => {
       nowPlaying,
       autoplayEnabled,
       autoplayDelay,
+      playbackVolume,
+      playbackPitch,
       karaokeRunning,
       lastSongMode,
       requestsEnabled

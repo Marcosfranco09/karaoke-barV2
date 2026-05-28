@@ -13,8 +13,13 @@ let ytPlayer;
 let ytReady = false;
 let autoplayEnabled = false;
 let autoplayDelay = 5;
+let playbackVolume = 100;
+let playbackPitch = 0;
 let karaokeRunning = false;
 let transitionTimeout;
+let audioContext = null;
+let htmlAudioGraph = null;
+let audioAudioGraph = null;
 
 const pauseOverlay = document.getElementById('pause-overlay');
 
@@ -38,6 +43,141 @@ function onYouTubeIframeAPIReady() {
     }
   });
   ytReady = true;
+  applyPlaybackSettings();
+}
+
+function createPitchShifter(context) {
+  const input = context.createGain();
+  const output = context.createGain();
+  const dry = context.createGain();
+  const wet = context.createGain();
+  const delayA = context.createDelay(0.12);
+  const delayB = context.createDelay(0.12);
+  const fadeA = context.createGain();
+  const fadeB = context.createGain();
+  const modA = context.createBufferSource();
+  const modB = context.createBufferSource();
+  const fadeBufferA = context.createBuffer(1, context.sampleRate, context.sampleRate);
+  const fadeBufferB = context.createBuffer(1, context.sampleRate, context.sampleRate);
+  const modBufferA = context.createBuffer(1, context.sampleRate, context.sampleRate);
+  const modBufferB = context.createBuffer(1, context.sampleRate, context.sampleRate);
+
+  const fadeDataA = fadeBufferA.getChannelData(0);
+  const fadeDataB = fadeBufferB.getChannelData(0);
+  const modDataA = modBufferA.getChannelData(0);
+  const modDataB = modBufferB.getChannelData(0);
+  const grainTime = 0.1;
+  const grainSamples = Math.floor(context.sampleRate * grainTime);
+
+  for (let i = 0; i < context.sampleRate; i++) {
+    const grainPos = i % grainSamples;
+    const half = grainSamples / 2;
+    const fade = grainPos < half ? grainPos / half : 1 - ((grainPos - half) / half);
+    const secondVoice = (i + half) % grainSamples;
+    const fadeSecond = secondVoice < half ? secondVoice / half : 1 - ((secondVoice - half) / half);
+    fadeDataA[i] = Math.max(0, Math.min(1, fade));
+    fadeDataB[i] = Math.max(0, Math.min(1, fadeSecond));
+  }
+
+  function fillModBuffers(ratio) {
+    const shiftUp = ratio >= 1;
+    const depth = Math.min(0.08, Math.abs(1 - ratio) * 0.045);
+    for (let i = 0; i < context.sampleRate; i++) {
+      const phaseA = (i % grainSamples) / grainSamples;
+      const phaseB = ((i + grainSamples / 2) % grainSamples) / grainSamples;
+      modDataA[i] = shiftUp ? depth * (1 - phaseA) : depth * phaseA;
+      modDataB[i] = shiftUp ? depth * (1 - phaseB) : depth * phaseB;
+    }
+  }
+
+  modA.buffer = modBufferA;
+  modB.buffer = modBufferB;
+  modA.loop = true;
+  modB.loop = true;
+
+  const fadeSourceA = context.createBufferSource();
+  const fadeSourceB = context.createBufferSource();
+  fadeSourceA.buffer = fadeBufferA;
+  fadeSourceB.buffer = fadeBufferB;
+  fadeSourceA.loop = true;
+  fadeSourceB.loop = true;
+
+  input.connect(dry);
+  dry.connect(output);
+  input.connect(delayA);
+  input.connect(delayB);
+  delayA.connect(fadeA);
+  delayB.connect(fadeB);
+  fadeA.connect(wet);
+  fadeB.connect(wet);
+  wet.connect(output);
+  fadeSourceA.connect(fadeA.gain);
+  fadeSourceB.connect(fadeB.gain);
+  modA.connect(delayA.delayTime);
+  modB.connect(delayB.delayTime);
+
+  fadeSourceA.start();
+  fadeSourceB.start();
+  modA.start();
+  modB.start();
+
+  return {
+    input,
+    output,
+    setPitch(semitones) {
+      const ratio = Math.pow(2, semitones / 12);
+      fillModBuffers(ratio);
+      const mix = Math.min(1, Math.abs(semitones) / 2);
+      dry.gain.value = semitones === 0 ? 1 : 0;
+      wet.gain.value = semitones === 0 ? 0 : mix;
+    }
+  };
+}
+
+function ensureAudioContext() {
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioContext.state === 'suspended') {
+    audioContext.resume();
+  }
+  return audioContext;
+}
+
+function ensureAudioGraph(mediaElement, existingGraph) {
+  if (existingGraph) return existingGraph;
+
+  const context = ensureAudioContext();
+  const source = context.createMediaElementSource(mediaElement);
+  const volume = context.createGain();
+  const shifter = createPitchShifter(context);
+
+  source.connect(shifter.input);
+  shifter.output.connect(volume);
+  volume.connect(context.destination);
+
+  return { volume, shifter };
+}
+
+function applyPlaybackSettings() {
+  const volume = Math.max(0, Math.min(1, playbackVolume / 100));
+  htmlPlayer.playbackRate = 1;
+  audioPlayer.playbackRate = 1;
+  htmlPlayer.volume = htmlAudioGraph ? 1 : volume;
+  audioPlayer.volume = audioAudioGraph ? 1 : volume;
+
+  if (htmlAudioGraph) {
+    htmlAudioGraph.volume.gain.value = volume;
+    htmlAudioGraph.shifter.setPitch(playbackPitch);
+  }
+  if (audioAudioGraph) {
+    audioAudioGraph.volume.gain.value = volume;
+    audioAudioGraph.shifter.setPitch(playbackPitch);
+  }
+
+  if (ytReady && ytPlayer) {
+    if (ytPlayer.setVolume) ytPlayer.setVolume(playbackVolume);
+  }
 }
 
 function onPlayerError(event) {
@@ -130,6 +270,10 @@ function playSong(song) {
       if (videoId && ytReady) {
         document.getElementById('yt-player').classList.remove('hidden');
         ytPlayer.loadVideoById({ videoId: videoId, suggestedQuality: 'hd1080' });
+        applyPlaybackSettings();
+        if (playbackPitch !== 0) {
+          socket.emit('screen-error', 'La tonalidad real solo se aplica a archivos locales, no a YouTube.');
+        }
       } else {
         socket.emit('screen-error', "Link de YouTube no válido o API no lista");
         showErrorOverlay();
@@ -141,11 +285,15 @@ function playSong(song) {
       if (['mp4', 'webm', 'ogg'].includes(ext)) {
         htmlPlayer.src = fullUrl;
         htmlPlayer.classList.remove('hidden');
+        htmlAudioGraph = ensureAudioGraph(htmlPlayer, htmlAudioGraph);
+        applyPlaybackSettings();
         htmlPlayer.play();
       } else {
         // asume audio
         audioPlayer.src = fullUrl;
         audioPlayer.classList.remove('hidden');
+        audioAudioGraph = ensureAudioGraph(audioPlayer, audioAudioGraph);
+        applyPlaybackSettings();
         audioPlayer.play();
       }
     }
@@ -199,7 +347,10 @@ socket.on('initial-state', (state) => {
 
   autoplayEnabled = state.autoplayEnabled;
   autoplayDelay = state.autoplayDelay || 5;
+  playbackVolume = state.playbackVolume ?? 100;
+  playbackPitch = state.playbackPitch ?? 0;
   karaokeRunning = state.karaokeRunning;
+  applyPlaybackSettings();
   updatePauseOverlay();
   renderQueue(state.queue);
   updateQueueLabel(!!state.nowPlaying);
@@ -215,6 +366,16 @@ socket.on('autoplay-state', (state) => {
 
 socket.on('autoplay-delay-state', (delay) => {
   autoplayDelay = delay;
+});
+
+socket.on('playback-volume-state', (volume) => {
+  playbackVolume = volume;
+  applyPlaybackSettings();
+});
+
+socket.on('playback-pitch-state', (pitch) => {
+  playbackPitch = pitch;
+  applyPlaybackSettings();
 });
 
 socket.on('karaoke-running-state', (isRunning) => {

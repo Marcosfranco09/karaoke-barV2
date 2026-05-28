@@ -40,6 +40,9 @@ ipcMain.on('open-window', (event, filename) => {
   });
   newWin.setMenuBarVisibility(false);
   newWin.loadFile(path.join(__dirname, 'dj', filename));
+  if (filename === 'dj.html') {
+    newWin.maximize();
+  }
 });
 
 app.whenReady().then(() => {

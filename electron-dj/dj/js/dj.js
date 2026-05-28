@@ -19,6 +19,10 @@ const delayMinus = document.getElementById('delay-minus');
 const delayPlus = document.getElementById('delay-plus');
 const lastSongSwitch = document.getElementById('last-song-switch');
 const requestsSwitch = document.getElementById('requests-switch');
+const volumeSlider = document.getElementById('volume-slider');
+const volumeValue = document.getElementById('volume-value');
+const pitchSlider = document.getElementById('pitch-slider');
+const pitchValue = document.getElementById('pitch-value');
 
 // Referencias al DOM - Petición Manual
 const btnManualAdd = document.getElementById('btn-manual-add');
@@ -113,7 +117,14 @@ function renderRequests() {
       ` : ''}
 
       <!-- Inputs Area (Fixed but responsive heights) -->
-      <div style="flex: 0 0 auto; background: rgba(0,0,0,0.3); padding: 1.5vh 1vw; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 1.5vh;">
+      <div id="media-drop-zone-${req.id}" class="media-drop-zone" style="flex: 0 0 auto; background: rgba(0,0,0,0.3); padding: 1.5vh 1vw; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 1.5vh;">
+        <div class="media-drop-overlay">
+          <div class="file-drop-box">
+            <span class="material-symbols-rounded">upload_file</span>
+            <h2>Soltar archivo aqui</h2>
+            <p>Se cargara en esta peticion.</p>
+          </div>
+        </div>
         <!-- Local File -->
         <div style="display: flex; gap: 0.4rem; margin-bottom: 1vh;">
           <label for="file-${req.id}" id="file-label-${req.id}" class="btn" style="margin: 0; padding: 0 1rem; font-size: clamp(0.75rem, 1.6vh, 0.85rem); flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.6rem; height: clamp(34px, 4.5vh, 44px); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;">
@@ -165,6 +176,40 @@ function renderRequests() {
     requestsContainer.appendChild(card);
   }
   pendingCount.textContent = pendingRequests.size;
+}
+
+function getActiveRequestId() {
+  const firstRequest = Array.from(pendingRequests.values())[0];
+  return firstRequest ? firstRequest.id : null;
+}
+
+function setRequestFile(id, file) {
+  const fileInput = document.getElementById(`file-${id}`);
+  const labelText = document.getElementById(`label-text-${id}`);
+  const labelIcon = document.getElementById(`label-icon-${id}`);
+
+  if (!fileInput) return false;
+
+  const transfer = new DataTransfer();
+  transfer.items.add(file);
+  fileInput.files = transfer.files;
+  if (labelText) labelText.textContent = file.name;
+  if (labelIcon) labelIcon.textContent = 'movie';
+  return true;
+}
+
+function getDraggedFiles(event) {
+  return Array.from(event.dataTransfer?.files || [])
+    .filter(file => file.type.startsWith('audio/') || file.type.startsWith('video/'));
+}
+
+function setActiveDropZone(isActive) {
+  const activeRequestId = getActiveRequestId();
+  const zone = activeRequestId ? document.getElementById(`media-drop-zone-${activeRequestId}`) : null;
+  document.querySelectorAll('.media-drop-zone.drop-active').forEach(item => {
+    if (item !== zone) item.classList.remove('drop-active');
+  });
+  if (zone) zone.classList.toggle('drop-active', isActive);
 }
 
 function animateAndRemove(id, direction = 'right') {
@@ -369,6 +414,18 @@ delayPlus.addEventListener('click', () => {
   socket.emit('set-autoplay-delay', val);
 });
 
+volumeSlider.addEventListener('input', (e) => {
+  const value = Number(e.target.value);
+  volumeValue.textContent = `${value}%`;
+  socket.emit('set-playback-volume', value);
+});
+
+pitchSlider.addEventListener('input', (e) => {
+  const value = Number(e.target.value);
+  pitchValue.textContent = value > 0 ? `+${value}` : `${value}`;
+  socket.emit('set-playback-pitch', value);
+});
+
 lastSongSwitch.addEventListener('change', (e) => {
   socket.emit('set-last-song', e.target.checked);
 });
@@ -511,7 +568,8 @@ manualForm.addEventListener('submit', (e) => {
     clientName,
     song: fullSongName,
     observation: manualObsToggle.checked ? inputManualObs.value.trim() : '',
-    table: 'DJ' // Distintivo para peticiones manuales
+    table: 'DJ', // Distintivo para peticiones manuales
+    source: 'dj-manual'
   });
   
   manualModal.classList.remove('active');
@@ -526,6 +584,10 @@ socket.on('initial-state', (state) => {
   queue = state.queue;
   autoplaySwitch.checked = state.autoplayEnabled;
   delayInput.value = state.autoplayDelay;
+  volumeSlider.value = state.playbackVolume ?? 100;
+  volumeValue.textContent = `${volumeSlider.value}%`;
+  pitchSlider.value = state.playbackPitch ?? 0;
+  pitchValue.textContent = Number(pitchSlider.value) > 0 ? `+${pitchSlider.value}` : `${pitchSlider.value}`;
   lastSongSwitch.checked = state.lastSongMode;
   requestsSwitch.checked = state.requestsEnabled;
   updatePlayNextBtn(state.autoplayEnabled);
@@ -551,6 +613,16 @@ socket.on('autoplay-state', (state) => {
 
 socket.on('autoplay-delay-state', (delay) => {
   delayInput.value = delay;
+});
+
+socket.on('playback-volume-state', (volume) => {
+  volumeSlider.value = volume;
+  volumeValue.textContent = `${volume}%`;
+});
+
+socket.on('playback-pitch-state', (pitch) => {
+  pitchSlider.value = pitch;
+  pitchValue.textContent = Number(pitch) > 0 ? `+${pitch}` : `${pitch}`;
 });
 
 socket.on('karaoke-running-state', (isRunning) => {
@@ -604,5 +676,49 @@ socket.on('request-cancelled', (requestId) => {
       pendingRequests.delete(requestId);
       renderRequests();
     }, 300);
+  }
+});
+
+let dragDepth = 0;
+
+window.addEventListener('dragenter', (event) => {
+  if (!event.dataTransfer?.types?.includes('Files')) return;
+  event.preventDefault();
+  dragDepth += 1;
+  setActiveDropZone(true);
+});
+
+window.addEventListener('dragover', (event) => {
+  if (!event.dataTransfer?.types?.includes('Files')) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'copy';
+});
+
+window.addEventListener('dragleave', (event) => {
+  if (!event.dataTransfer?.types?.includes('Files')) return;
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) setActiveDropZone(false);
+});
+
+window.addEventListener('drop', (event) => {
+  if (!event.dataTransfer?.types?.includes('Files')) return;
+  event.preventDefault();
+  dragDepth = 0;
+  setActiveDropZone(false);
+
+  const [file] = getDraggedFiles(event);
+  if (!file) {
+    showToast('Solta un archivo de audio o video.', 'error');
+    return;
+  }
+
+  const activeRequestId = getActiveRequestId();
+  if (!activeRequestId) {
+    showToast('No hay peticiones pendientes para cargar el archivo.', 'error');
+    return;
+  }
+
+  if (setRequestFile(activeRequestId, file)) {
+    showToast(`Archivo cargado: ${file.name}`, 'success');
   }
 });
