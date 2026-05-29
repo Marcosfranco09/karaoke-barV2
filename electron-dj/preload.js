@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('djConfig', {
-  serverUrl: process.env.SERVER_URL || 'http://localhost:3000',
+  serverUrl: process.env.SERVER_URL || 'https://puertochopp-karaoke.onrender.com',
   djToken: process.env.DJ_TOKEN || 'puertochoppdj'
 });
 
