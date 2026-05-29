@@ -170,9 +170,8 @@ function createPitchShifter(context) {
     setPitch(semitones) {
       const ratio = Math.pow(2, semitones / 12);
       fillModBuffers(ratio);
-      const mix = Math.min(1, Math.abs(semitones) / 2);
       dry.gain.value = semitones === 0 ? 1 : 0;
-      wet.gain.value = semitones === 0 ? 0 : mix;
+      wet.gain.value = semitones === 0 ? 0 : 1;
     }
   };
 }

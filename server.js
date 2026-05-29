@@ -463,10 +463,11 @@ io.on('connection', (socket) => {
     try {
       let lastErr = null;
       const methods = [
-        { name: 'android', opts: { extractorArgs: 'youtube:player_client=android' } },
         { name: 'edge cookies', opts: { cookiesFromBrowser: 'edge' } },
         { name: 'chrome cookies', opts: { cookiesFromBrowser: 'chrome' } },
+        { name: 'android', opts: { extractorArgs: 'youtube:player_client=android' } },
         { name: 'ios', opts: { extractorArgs: 'youtube:player_client=ios' } },
+        { name: 'default', opts: {} }
       ];
 
       for (const { name, opts } of methods) {
